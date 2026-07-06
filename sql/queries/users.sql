@@ -1,4 +1,7 @@
 -- name: CreateUser :one
-INSERT INTO users (id, created_at, updated_at, email)
-VALUES ($1, $2, $3, $4)
+INSERT INTO users (id, email)
+VALUES ($1, $2)
 RETURNING *;
+
+-- name: ResetUsers :exec
+DELETE FROM users;

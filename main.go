@@ -11,7 +11,9 @@ import (
 	"simplehttp/internal/database"
 	"strings"
 	"sync/atomic"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
@@ -20,13 +22,14 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	dbQueries      *database.Queries
 	DB             *sql.DB
+	platform       string
 }
 
-func (c *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c.fileserverHits.Add(1)
-		next.ServeHTTP(w, r)
-	})
+type User struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Email     string    `json:"email"`
 }
 
 type middleware func(http.Handler) http.Handler
@@ -41,6 +44,7 @@ func chain(h http.Handler, middlewares ...middleware) http.Handler {
 func main() {
 	godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
+	platform := os.Getenv("PLATFORM")
 
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -58,6 +62,7 @@ func main() {
 		fileserverHits: atomic.Int32{},
 		dbQueries:      database.New(db),
 		DB:             db,
+		platform:       platform,
 	}
 
 	mux.Handle("/app/", http.StripPrefix("/app/", chain(
@@ -79,6 +84,10 @@ func main() {
 	))
 	mux.Handle("POST /api/validate_chirp", chain(
 		http.HandlerFunc(validateChirp),
+		middlewareLog,
+	))
+	mux.Handle("POST /api/users", chain(
+		http.HandlerFunc(apiCfg.createUser),
 		middlewareLog,
 	))
 
@@ -124,6 +133,44 @@ func cleanChirpBody(body string) string {
 	return re.ReplaceAllString(body, "****")
 }
 
+func (c *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
+	type NewUser struct {
+		Email string `json:"email"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	body := NewUser{}
+	err := decoder.Decode(&body)
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusBadRequest,
+			map[string]string{"error": "Invalid request body"},
+		)
+		return
+	}
+
+	newUser, err := c.dbQueries.CreateUser(r.Context(), database.CreateUserParams{
+		ID:    uuid.New(),
+		Email: body.Email,
+	})
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusInternalServerError,
+			map[string]string{"error": "Failed to create user"},
+		)
+		return
+	}
+
+	userResponse := User{
+		ID:        newUser.ID,
+		CreatedAt: newUser.CreatedAt,
+		UpdatedAt: newUser.UpdatedAt,
+		Email:     newUser.Email,
+	}
+
+	respondWithJSON(w, http.StatusCreated, userResponse)
+}
+
+// Helpers
 func respondWithError(w http.ResponseWriter, statusCode int, message string) {
 	w.Header().Add("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Add("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -145,6 +192,7 @@ func healthz(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
+// Hits handlers
 func (c *apiConfig) getHits(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "text/html; charset=utf-8")
 	w.Header().Add("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -158,17 +206,31 @@ func (c *apiConfig) getHits(w http.ResponseWriter, r *http.Request) {
 	w.Write(fmt.Appendf(nil, page, c.fileserverHits.Load()))
 }
 
+// XXX: This also resets the users...
 func (c *apiConfig) resetHits(w http.ResponseWriter, r *http.Request) {
+	if c.platform != "dev" {
+		respondWithError(w, http.StatusForbidden, "Not allowed")
+		return
+	}
 	c.fileserverHits.Store(0)
+	c.dbQueries.ResetUsers(r.Context())
 	w.Header().Add("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Add("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Hits reset"))
+	w.Write([]byte("Hits and users reset"))
 }
 
+// Middleware functions
 func middlewareLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("%s %s", r.Method, r.URL.Path)
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (c *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c.fileserverHits.Add(1)
 		next.ServeHTTP(w, r)
 	})
 }
