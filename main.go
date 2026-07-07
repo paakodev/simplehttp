@@ -94,6 +94,10 @@ func main() {
 		http.HandlerFunc(apiCfg.chirpsHandler),
 		middlewareLog,
 	))
+	mux.Handle("GET /api/chirps", chain(
+		http.HandlerFunc(apiCfg.getAllChirps),
+		middlewareLog,
+	))
 	mux.Handle("POST /api/users", chain(
 		http.HandlerFunc(apiCfg.createUser),
 		middlewareLog,
@@ -164,6 +168,30 @@ func (c *apiConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
 		UserID:    newChirp.UserID,
 	}
 	respondWithJSON(w, http.StatusCreated, chirpResponse)
+}
+
+func (c *apiConfig) getAllChirps(w http.ResponseWriter, r *http.Request) {
+	chirps, err := c.dbQueries.GetAllChirps(r.Context())
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusInternalServerError,
+			map[string]string{"error": "Failed to retrieve chirps"},
+		)
+		return
+	}
+
+	chirpResponses := make([]ChirpResponse, len(chirps))
+	for i, chirp := range chirps {
+		chirpResponses[i] = ChirpResponse{
+			ID:        chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body:      chirp.Body,
+			UserID:    chirp.UserID,
+		}
+	}
+
+	respondWithJSON(w, http.StatusOK, chirpResponses)
 }
 
 func (c *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
