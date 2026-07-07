@@ -3,7 +3,7 @@ CREATE TABLE chirps (
     id UUID PRIMARY KEY,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    body VARCHAR(140) NOT NULL,
+    body TEXT NOT NULL CHECK (LENGTH(body) <= 140),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
 );
 

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"simplehttp/internal/auth"
 	"simplehttp/internal/database"
 	"strings"
 	"sync/atomic"
@@ -92,18 +93,27 @@ func main() {
 	))
 	mux.Handle("POST /api/chirps", chain(
 		http.HandlerFunc(apiCfg.chirpsHandler),
+		apiCfg.middlewareMetricsInc,
 		middlewareLog,
 	))
 	mux.Handle("GET /api/chirps", chain(
 		http.HandlerFunc(apiCfg.getChirps),
+		apiCfg.middlewareMetricsInc,
 		middlewareLog,
 	))
 	mux.Handle("GET /api/chirps/{id}", chain(
 		http.HandlerFunc(apiCfg.getChirpByID),
+		apiCfg.middlewareMetricsInc,
 		middlewareLog,
 	))
 	mux.Handle("POST /api/users", chain(
 		http.HandlerFunc(apiCfg.createUser),
+		apiCfg.middlewareMetricsInc,
+		middlewareLog,
+	))
+	mux.Handle("POST /api/login", chain(
+		http.HandlerFunc(apiCfg.loginHandler),
+		apiCfg.middlewareMetricsInc,
 		middlewareLog,
 	))
 
@@ -241,7 +251,8 @@ func (c *apiConfig) getChirpByID(w http.ResponseWriter, r *http.Request) {
 
 func (c *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 	type NewUser struct {
-		Email string `json:"email"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 	decoder := json.NewDecoder(r.Body)
 	body := NewUser{}
@@ -254,9 +265,19 @@ func (c *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	hashedPassword, err := auth.HashPassword(body.Password)
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusInternalServerError,
+			map[string]string{"error": "Failed to hash password"},
+		)
+		return
+	}
+
 	newUser, err := c.dbQueries.CreateUser(r.Context(), database.CreateUserParams{
-		ID:    uuid.New(),
-		Email: body.Email,
+		ID:             uuid.New(),
+		Email:          body.Email,
+		HashedPassword: hashedPassword,
 	})
 	if err != nil {
 		respondWithJSON(w,
@@ -274,6 +295,64 @@ func (c *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, http.StatusCreated, userResponse)
+}
+
+func (c *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
+	type LoginRequest struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	loginReq := LoginRequest{}
+	err := decoder.Decode(&loginReq)
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusBadRequest,
+			map[string]string{"error": "Invalid request body"},
+		)
+		return
+	}
+
+	user, err := c.dbQueries.GetUserByEmail(r.Context(), loginReq.Email)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			respondWithJSON(w,
+				http.StatusUnauthorized,
+				map[string]string{"error": "Incorrect email or password"},
+			)
+			return
+		}
+		respondWithJSON(w,
+			http.StatusInternalServerError,
+			map[string]string{"error": "Failed to retrieve user"},
+		)
+		return
+	}
+
+	match, err := auth.CheckPasswordHash(loginReq.Password, user.HashedPassword)
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusInternalServerError,
+			map[string]string{"error": "Failed to check password"},
+		)
+		return
+	}
+	if !match {
+		respondWithJSON(w,
+			http.StatusUnauthorized,
+			map[string]string{"error": "Incorrect email or password"},
+		)
+		return
+	}
+
+	userResponse := UserResponse{
+		ID:        user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email:     user.Email,
+	}
+
+	respondWithJSON(w, http.StatusOK, userResponse)
 }
 
 // Helpers
