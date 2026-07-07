@@ -25,11 +25,19 @@ type apiConfig struct {
 	platform       string
 }
 
-type User struct {
+type UserResponse struct {
 	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
+}
+
+type ChirpResponse struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Body      string    `json:"body"`
+	UserID    uuid.UUID `json:"user_id"`
 }
 
 type middleware func(http.Handler) http.Handler
@@ -82,8 +90,8 @@ func main() {
 		http.HandlerFunc(apiCfg.resetHits),
 		middlewareLog,
 	))
-	mux.Handle("POST /api/validate_chirp", chain(
-		http.HandlerFunc(validateChirp),
+	mux.Handle("POST /api/chirps", chain(
+		http.HandlerFunc(apiCfg.chirpsHandler),
 		middlewareLog,
 	))
 	mux.Handle("POST /api/users", chain(
@@ -95,32 +103,12 @@ func main() {
 	server.ListenAndServe()
 }
 
-func validateChirp(w http.ResponseWriter, r *http.Request) {
-	type Chirp struct {
-		Body string `json:"body"`
-	}
-	decoder := json.NewDecoder(r.Body)
-	body := Chirp{}
-	err := decoder.Decode(&body)
-	if err != nil {
-		respondWithJSON(w,
-			http.StatusBadRequest,
-			map[string]string{"error": "Invalid request body"},
-		)
-		return
+func validateChirp(chirp string) (string, error) {
+	if len(chirp) > 140 {
+		return "", fmt.Errorf("chirp body exceeds 140 characters")
 	}
 
-	if len(body.Body) > 140 {
-		respondWithJSON(w,
-			http.StatusBadRequest,
-			map[string]string{"error": "Chirp body exceeds 140 characters"},
-		)
-		return
-	}
-
-	cleanedBody := cleanChirpBody(body.Body)
-
-	respondWithJSON(w, http.StatusOK, map[string]string{"cleaned_body": cleanedBody})
+	return cleanChirpBody(chirp), nil
 }
 
 func cleanChirpBody(body string) string {
@@ -131,6 +119,51 @@ func cleanChirpBody(body string) string {
 	}
 	re := regexp.MustCompile(`(?i)(` + strings.Join(parts, "|") + `)\b`)
 	return re.ReplaceAllString(body, "****")
+}
+
+func (c *apiConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
+	type Chirp struct {
+		Body   string    `json:"body"`
+		UserID uuid.UUID `json:"user_id"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	chirpData := Chirp{}
+	err := decoder.Decode(&chirpData)
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusBadRequest,
+			map[string]string{"error": "Invalid request body"},
+		)
+		return
+	}
+	validatedBody, err := validateChirp(chirpData.Body)
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusBadRequest,
+			map[string]string{"error": err.Error()},
+		)
+		return
+	}
+	newChirp, err := c.dbQueries.CreateChirp(r.Context(), database.CreateChirpParams{
+		ID:     uuid.New(),
+		Body:   validatedBody,
+		UserID: chirpData.UserID,
+	})
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusInternalServerError,
+			map[string]string{"error": "Failed to create chirp"},
+		)
+		return
+	}
+	chirpResponse := ChirpResponse{
+		ID:        newChirp.ID,
+		CreatedAt: newChirp.CreatedAt,
+		UpdatedAt: newChirp.UpdatedAt,
+		Body:      newChirp.Body,
+		UserID:    newChirp.UserID,
+	}
+	respondWithJSON(w, http.StatusCreated, chirpResponse)
 }
 
 func (c *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
@@ -160,7 +193,7 @@ func (c *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userResponse := User{
+	userResponse := UserResponse{
 		ID:        newUser.ID,
 		CreatedAt: newUser.CreatedAt,
 		UpdatedAt: newUser.UpdatedAt,
