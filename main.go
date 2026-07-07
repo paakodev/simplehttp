@@ -95,7 +95,11 @@ func main() {
 		middlewareLog,
 	))
 	mux.Handle("GET /api/chirps", chain(
-		http.HandlerFunc(apiCfg.getAllChirps),
+		http.HandlerFunc(apiCfg.getChirps),
+		middlewareLog,
+	))
+	mux.Handle("GET /api/chirps/{id}", chain(
+		http.HandlerFunc(apiCfg.getChirpByID),
 		middlewareLog,
 	))
 	mux.Handle("POST /api/users", chain(
@@ -170,8 +174,11 @@ func (c *apiConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusCreated, chirpResponse)
 }
 
-func (c *apiConfig) getAllChirps(w http.ResponseWriter, r *http.Request) {
-	chirps, err := c.dbQueries.GetAllChirps(r.Context())
+func (c *apiConfig) getChirps(w http.ResponseWriter, r *http.Request) {
+	chirps, err := c.dbQueries.GetAllChirps(r.Context(), database.GetAllChirpsParams{
+		Limit:  100,
+		Offset: 0,
+	})
 	if err != nil {
 		respondWithJSON(w,
 			http.StatusInternalServerError,
@@ -192,6 +199,44 @@ func (c *apiConfig) getAllChirps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, http.StatusOK, chirpResponses)
+}
+
+func (c *apiConfig) getChirpByID(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusBadRequest,
+			map[string]string{"error": "Invalid chirp ID"},
+		)
+		return
+	}
+
+	chirp, err := c.dbQueries.GetChirpByID(r.Context(), uid)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			respondWithJSON(w,
+				http.StatusNotFound,
+				map[string]string{"error": "Chirp not found"},
+			)
+			return
+		}
+		respondWithJSON(w,
+			http.StatusInternalServerError,
+			map[string]string{"error": "Failed to retrieve chirp"},
+		)
+		return
+	}
+
+	chirpResponse := ChirpResponse{
+		ID:        chirp.ID,
+		CreatedAt: chirp.CreatedAt,
+		UpdatedAt: chirp.UpdatedAt,
+		Body:      chirp.Body,
+		UserID:    chirp.UserID,
+	}
+
+	respondWithJSON(w, http.StatusOK, chirpResponse)
 }
 
 func (c *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {

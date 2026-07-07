@@ -5,4 +5,10 @@ RETURNING *;
 
 -- name: GetAllChirps :many
 SELECT * FROM chirps
-ORDER BY created_at ASC;
+ORDER BY created_at ASC
+LIMIT $1
+OFFSET $2;
+
+-- name: GetChirpByID :one
+SELECT * FROM chirps
+WHERE id = $1;
