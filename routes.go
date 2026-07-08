@@ -18,10 +18,12 @@ func registerRoutes(mux *http.ServeMux, apiCfg *apiConfig) {
 		http.HandlerFunc(apiCfg.getHits),
 		middlewareLog,
 	))
+
 	mux.Handle("POST /admin/reset", chain(
 		http.HandlerFunc(apiCfg.resetHits),
 		middlewareLog,
 	))
+
 	mux.Handle("POST /api/chirps", chain(
 		http.HandlerFunc(apiCfg.chirpPost),
 		apiCfg.middlewareMetricsInc,
@@ -37,6 +39,12 @@ func registerRoutes(mux *http.ServeMux, apiCfg *apiConfig) {
 		apiCfg.middlewareMetricsInc,
 		middlewareLog,
 	))
+	mux.Handle("DELETE /api/chirps/{chirpID}", chain(
+		http.HandlerFunc(apiCfg.deleteChirpByChirpID),
+		apiCfg.middlewareMetricsInc,
+		middlewareLog,
+	))
+
 	mux.Handle("POST /api/users", chain(
 		http.HandlerFunc(apiCfg.createUser),
 		apiCfg.middlewareMetricsInc,
@@ -47,6 +55,7 @@ func registerRoutes(mux *http.ServeMux, apiCfg *apiConfig) {
 		apiCfg.middlewareMetricsInc,
 		middlewareLog,
 	))
+
 	mux.Handle("POST /api/login", chain(
 		http.HandlerFunc(apiCfg.loginHandler),
 		apiCfg.middlewareMetricsInc,
