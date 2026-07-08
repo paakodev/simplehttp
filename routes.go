@@ -47,4 +47,14 @@ func registerRoutes(mux *http.ServeMux, apiCfg *apiConfig) {
 		apiCfg.middlewareMetricsInc,
 		middlewareLog,
 	))
+	mux.Handle("POST /api/refresh", chain(
+		http.HandlerFunc(apiCfg.refreshTokenHandler),
+		apiCfg.middlewareMetricsInc,
+		middlewareLog,
+	))
+	mux.Handle("POST /api/revoke", chain(
+		http.HandlerFunc(apiCfg.revokeRefreshTokenHandler),
+		apiCfg.middlewareMetricsInc,
+		middlewareLog,
+	))
 }

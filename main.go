@@ -44,5 +44,7 @@ func main() {
 	registerRoutes(mux, apiCfg)
 
 	log.Printf("Starting server on %s", server.Addr)
-	server.ListenAndServe()
+	if err := server.ListenAndServe(); err != nil {
+		log.Fatalf("Server failed: %v", err)
+	}
 }

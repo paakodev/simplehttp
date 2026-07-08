@@ -18,3 +18,8 @@ func respondWithJSON(w http.ResponseWriter, statusCode int, payload interface{})
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(payload)
 }
+
+func respondWithNoContent(w http.ResponseWriter) {
+	w.Header().Add("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.WriteHeader(http.StatusNoContent)
+}
