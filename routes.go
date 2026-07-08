@@ -42,6 +42,11 @@ func registerRoutes(mux *http.ServeMux, apiCfg *apiConfig) {
 		apiCfg.middlewareMetricsInc,
 		middlewareLog,
 	))
+	mux.Handle("PUT /api/users", chain(
+		http.HandlerFunc(apiCfg.updateUser),
+		apiCfg.middlewareMetricsInc,
+		middlewareLog,
+	))
 	mux.Handle("POST /api/login", chain(
 		http.HandlerFunc(apiCfg.loginHandler),
 		apiCfg.middlewareMetricsInc,

@@ -59,6 +59,87 @@ func (c *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusCreated, userResponse)
 }
 
+func (c *apiConfig) updateUser(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusUnauthorized,
+			map[string]string{"error": "Missing or invalid token"},
+		)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(token, c.tokenSecret)
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusUnauthorized,
+			map[string]string{"error": "Invalid token"},
+		)
+		return
+	}
+
+	type UpdateUserRequest struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	updateRequest := UpdateUserRequest{}
+	decoder := json.NewDecoder(r.Body)
+	err = decoder.Decode(&updateRequest)
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusBadRequest,
+			map[string]string{"error": "Invalid request body"},
+		)
+		return
+	}
+
+	user, err := c.dbQueries.GetUserByID(r.Context(), userID)
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusInternalServerError,
+			map[string]string{"error": "Failed to retrieve user"},
+		)
+		return
+	}
+
+	if updateRequest.Email != "" {
+		user.Email = updateRequest.Email
+	}
+	if updateRequest.Password != "" {
+		hashedPassword, err := auth.HashPassword(updateRequest.Password)
+		if err != nil {
+			respondWithJSON(w,
+				http.StatusInternalServerError,
+				map[string]string{"error": "Failed to hash password"},
+			)
+			return
+		}
+		user.HashedPassword = hashedPassword
+	}
+
+	updatedUser, err := c.dbQueries.UpdateUser(r.Context(), database.UpdateUserParams{
+		ID:             user.ID,
+		Email:          user.Email,
+		HashedPassword: user.HashedPassword,
+	})
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusInternalServerError,
+			map[string]string{"error": "Failed to update user"},
+		)
+		return
+	}
+
+	userResponse := UserResponse{
+		ID:        updatedUser.ID,
+		CreatedAt: updatedUser.CreatedAt,
+		UpdatedAt: updatedUser.UpdatedAt,
+		Email:     updatedUser.Email,
+	}
+
+	respondWithJSON(w, http.StatusOK, userResponse)
+}
+
 func (c *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 	type LoginRequest struct {
 		Email    string `json:"email"`
