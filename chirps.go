@@ -32,22 +32,6 @@ func cleanChirpBody(body string) string {
 }
 
 func (c *apiConfig) chirpPost(w http.ResponseWriter, r *http.Request) {
-	type Chirp struct {
-		Body   string    `json:"body"`
-		UserID uuid.UUID `json:"user_id"`
-		Token  string    `json:"token"`
-	}
-	decoder := json.NewDecoder(r.Body)
-	chirpData := Chirp{}
-	err := decoder.Decode(&chirpData)
-	if err != nil {
-		respondWithJSON(w,
-			http.StatusBadRequest,
-			map[string]string{"error": "Invalid request body"},
-		)
-		return
-	}
-
 	token, err := auth.GetBearerToken(r.Header)
 	if err != nil {
 		respondWithJSON(w,
@@ -62,6 +46,22 @@ func (c *apiConfig) chirpPost(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w,
 			http.StatusUnauthorized,
 			map[string]string{"error": "Invalid token"},
+		)
+		return
+	}
+
+	type Chirp struct {
+		Body   string    `json:"body"`
+		UserID uuid.UUID `json:"user_id"`
+		Token  string    `json:"token"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	chirpData := Chirp{}
+	err = decoder.Decode(&chirpData)
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusBadRequest,
+			map[string]string{"error": "Invalid request body"},
 		)
 		return
 	}
