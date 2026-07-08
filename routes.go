@@ -71,4 +71,9 @@ func registerRoutes(mux *http.ServeMux, apiCfg *apiConfig) {
 		apiCfg.middlewareMetricsInc,
 		middlewareLog,
 	))
+
+	mux.Handle("POST /api/polka/webhooks", chain(
+		http.HandlerFunc(apiCfg.polkaWebhookHandler),
+		middlewareLog,
+	))
 }
