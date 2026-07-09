@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"simplehttp/internal/auth"
 	"simplehttp/internal/database"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -147,10 +149,56 @@ func (c *apiConfig) deleteChirpByChirpID(w http.ResponseWriter, r *http.Request)
 }
 
 func (c *apiConfig) getChirps(w http.ResponseWriter, r *http.Request) {
-	chirps, err := c.dbQueries.GetAllChirps(r.Context(), database.GetAllChirpsParams{
-		Limit:  100,
-		Offset: 0,
-	})
+	opts, err := parseChirpQueryOptions(r)
+	if err != nil {
+		respondWithJSON(w,
+			http.StatusBadRequest,
+			map[string]string{"error": err.Error()},
+		)
+		return
+	}
+
+	var chirps []database.Chirp
+	switch {
+	case opts.AuthorID != nil && opts.SortOrder == "asc":
+		chirps, err = c.dbQueries.GetChirpsByUserIDAsc(r.Context(), database.GetChirpsByUserIDAscParams{
+			UserID: *opts.AuthorID,
+			Limit:  opts.Limit,
+			Offset: opts.Offset,
+		})
+	case opts.AuthorID != nil && opts.SortOrder == "desc":
+		chirps, err = c.dbQueries.GetChirpsByUserIDDesc(r.Context(), database.GetChirpsByUserIDDescParams{
+			UserID: *opts.AuthorID,
+			Limit:  opts.Limit,
+			Offset: opts.Offset,
+		})
+	case opts.AuthorID == nil && opts.SortOrder == "asc":
+		chirps, err = c.dbQueries.GetAllChirpsAsc(r.Context(), database.GetAllChirpsAscParams{
+			Limit:  opts.Limit,
+			Offset: opts.Offset,
+		})
+	case opts.AuthorID == nil && opts.SortOrder == "desc":
+		chirps, err = c.dbQueries.GetAllChirpsDesc(r.Context(), database.GetAllChirpsDescParams{
+			Limit:  opts.Limit,
+			Offset: opts.Offset,
+		})
+	default:
+		log.Printf("unexpected sort order %q; falling back to ascending", opts.SortOrder)
+
+		if opts.AuthorID != nil {
+			chirps, err = c.dbQueries.GetChirpsByUserIDAsc(r.Context(), database.GetChirpsByUserIDAscParams{
+				UserID: *opts.AuthorID,
+				Limit:  opts.Limit,
+				Offset: opts.Offset,
+			})
+		} else {
+			chirps, err = c.dbQueries.GetAllChirpsAsc(r.Context(), database.GetAllChirpsAscParams{
+				Limit:  opts.Limit,
+				Offset: opts.Offset,
+			})
+		}
+	}
+
 	if err != nil {
 		respondWithJSON(w,
 			http.StatusInternalServerError,
@@ -171,6 +219,54 @@ func (c *apiConfig) getChirps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, http.StatusOK, chirpResponses)
+}
+
+func parseChirpQueryOptions(r *http.Request) (ChirpQueryOptions, error) {
+	const maxLimit = 1000
+
+	options := ChirpQueryOptions{
+		Limit:     100,   // default limit
+		Offset:    0,     // default offset
+		SortOrder: "asc", // default sort order
+		AuthorID:  nil,   // default author ID
+	}
+
+	query := r.URL.Query()
+
+	authorID := query.Get("author_id")
+	if authorID != "" {
+		uid, err := uuid.Parse(authorID)
+		if err != nil {
+			return ChirpQueryOptions{}, fmt.Errorf("invalid author_id")
+		}
+		options.AuthorID = &uid
+	}
+
+	sort := query.Get("sort")
+	switch sort {
+	case "desc":
+		options.SortOrder = "desc"
+	case "asc", "":
+		options.SortOrder = "asc"
+	default:
+		return ChirpQueryOptions{}, fmt.Errorf("invalid sort option")
+	}
+
+	n, err := strconv.ParseInt(query.Get("limit"), 10, 32)
+	if err == nil {
+		limit := int32(n)
+		if limit > maxLimit {
+			limit = maxLimit
+		}
+		options.Limit = limit
+	}
+
+	n, err = strconv.ParseInt(query.Get("offset"), 10, 32)
+	if err == nil {
+		options.Offset = int32(n)
+	}
+
+	return options, nil
 }
 
 func (c *apiConfig) getChirpByID(w http.ResponseWriter, r *http.Request) {

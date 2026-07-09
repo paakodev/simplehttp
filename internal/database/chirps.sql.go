@@ -46,20 +46,61 @@ func (q *Queries) DeleteChirpByID(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-const getAllChirps = `-- name: GetAllChirps :many
+const getAllChirpsAsc = `-- name: GetAllChirpsAsc :many
 SELECT id, created_at, updated_at, body, user_id FROM chirps
 ORDER BY created_at ASC
 LIMIT $1
 OFFSET $2
 `
 
-type GetAllChirpsParams struct {
+type GetAllChirpsAscParams struct {
 	Limit  int32
 	Offset int32
 }
 
-func (q *Queries) GetAllChirps(ctx context.Context, arg GetAllChirpsParams) ([]Chirp, error) {
-	rows, err := q.db.QueryContext(ctx, getAllChirps, arg.Limit, arg.Offset)
+func (q *Queries) GetAllChirpsAsc(ctx context.Context, arg GetAllChirpsAscParams) ([]Chirp, error) {
+	rows, err := q.db.QueryContext(ctx, getAllChirpsAsc, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Chirp
+	for rows.Next() {
+		var i Chirp
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Body,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllChirpsDesc = `-- name: GetAllChirpsDesc :many
+SELECT id, created_at, updated_at, body, user_id FROM chirps
+ORDER BY created_at DESC
+LIMIT $1
+OFFSET $2
+`
+
+type GetAllChirpsDescParams struct {
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) GetAllChirpsDesc(ctx context.Context, arg GetAllChirpsDescParams) ([]Chirp, error) {
+	rows, err := q.db.QueryContext(ctx, getAllChirpsDesc, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +144,92 @@ func (q *Queries) GetChirpByID(ctx context.Context, id uuid.UUID) (Chirp, error)
 		&i.UserID,
 	)
 	return i, err
+}
+
+const getChirpsByUserIDAsc = `-- name: GetChirpsByUserIDAsc :many
+SELECT id, created_at, updated_at, body, user_id FROM chirps
+WHERE user_id = $1
+ORDER BY created_at ASC
+LIMIT $2
+OFFSET $3
+`
+
+type GetChirpsByUserIDAscParams struct {
+	UserID uuid.UUID
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) GetChirpsByUserIDAsc(ctx context.Context, arg GetChirpsByUserIDAscParams) ([]Chirp, error) {
+	rows, err := q.db.QueryContext(ctx, getChirpsByUserIDAsc, arg.UserID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Chirp
+	for rows.Next() {
+		var i Chirp
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Body,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getChirpsByUserIDDesc = `-- name: GetChirpsByUserIDDesc :many
+SELECT id, created_at, updated_at, body, user_id FROM chirps
+WHERE user_id = $1
+ORDER BY created_at DESC
+LIMIT $2
+OFFSET $3
+`
+
+type GetChirpsByUserIDDescParams struct {
+	UserID uuid.UUID
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) GetChirpsByUserIDDesc(ctx context.Context, arg GetChirpsByUserIDDescParams) ([]Chirp, error) {
+	rows, err := q.db.QueryContext(ctx, getChirpsByUserIDDesc, arg.UserID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Chirp
+	for rows.Next() {
+		var i Chirp
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Body,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUserIdFromChirpId = `-- name: GetUserIdFromChirpId :one

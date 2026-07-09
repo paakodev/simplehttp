@@ -35,3 +35,10 @@ type ChirpResponse struct {
 	Body      string    `json:"body"`
 	UserID    uuid.UUID `json:"user_id"`
 }
+
+type ChirpQueryOptions struct {
+	AuthorID  *uuid.UUID
+	SortOrder string
+	Limit     int32
+	Offset    int32
+}
