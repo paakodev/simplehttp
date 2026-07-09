@@ -3,11 +3,21 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"simplehttp/internal/auth"
 
 	"github.com/google/uuid"
 )
 
 func (c *apiConfig) polkaWebhookHandler(w http.ResponseWriter, r *http.Request) {
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil || apiKey != c.polkaKey {
+		respondWithJSON(w,
+			http.StatusUnauthorized,
+			map[string]string{"error": "Missing or invalid API key"},
+		)
+		return
+	}
+
 	type UpgradeRequest struct {
 		Event string `json:"event"`
 		Data  struct {
@@ -17,7 +27,7 @@ func (c *apiConfig) polkaWebhookHandler(w http.ResponseWriter, r *http.Request) 
 
 	updateRequest := UpgradeRequest{}
 	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(&updateRequest)
+	err = decoder.Decode(&updateRequest)
 	if err != nil {
 		respondWithJSON(w,
 			http.StatusBadRequest,

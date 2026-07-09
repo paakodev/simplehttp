@@ -15,6 +15,7 @@ type apiConfig struct {
 	DB             *sql.DB
 	platform       string
 	tokenSecret    string
+	polkaKey       string
 }
 
 type UserResponse struct {

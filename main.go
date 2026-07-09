@@ -20,6 +20,7 @@ func main() {
 	dbURL := os.Getenv("DB_URL")
 	platform := os.Getenv("PLATFORM")
 	tokenSecret := os.Getenv("TOKEN_SECRET")
+	polkaKey := os.Getenv("POLKA_KEY")
 
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -39,6 +40,7 @@ func main() {
 		DB:             db,
 		platform:       platform,
 		tokenSecret:    tokenSecret,
+		polkaKey:       polkaKey,
 	}
 
 	registerRoutes(mux, apiCfg)

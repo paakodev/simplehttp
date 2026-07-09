@@ -4,3 +4,4 @@ GOOSE_MIGRATION_DIR=./sql/schema/
 DB_URL="postgres://[user]:[password]@localhost:5432/chirpy?sslmode=disable"
 PLATFORM="dev"
 TOKEN_SECRET="your-secret-token"
+POLKA_KEY="your-secret-token"

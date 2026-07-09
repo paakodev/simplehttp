@@ -82,3 +82,12 @@ func MakeRefreshToken() string {
 	}
 	return hex.EncodeToString(randData)
 }
+
+func GetAPIKey(headers http.Header) (string, error) {
+	keyHeader := headers.Get("Authorization")
+	const prefix = "ApiKey "
+	if len(keyHeader) <= len(prefix) || keyHeader[:len(prefix)] != prefix {
+		return "", http.ErrNoCookie
+	}
+	return keyHeader[len(prefix):], nil
+}
